@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>BabylonJS AR眼镜试戴系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        
+        body {
+            background: #0a0a14;
+            color: #f0f0f0;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        header {
+            background: rgba(22, 22, 40, 0.95);
+            padding: 15px 20px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            backdrop-filter: blur(6px);
+            position: relative;
+        }
+        
+        h1 {
+            font-size: 1.5rem;
+            background: linear-gradient(90deg, #4cc9f0, #4361ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 600;
+        }
+        
+        #renderCanvas {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: block;
+            outline: none;
+        }
+        
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 20, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            transition: opacity 0.5s ease;
+        }
+        
+        .loading-content {
+            text-align: center;
+            max-width: 90%;
+        }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid rgba(67, 97, 238, 0.3);
+            border-top: 6px solid #4cc9f0;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 25px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-title {
+            font-size: 1.8rem;
+            color: #e0e0ff;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        
+        .loading-text {
+            font-size: 1.1rem;
+            color: #bbbbdd;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        
+        .progress-container {
+            width: 80%;
+            margin: 0 auto;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4361ee, #4cc9f0);
+            transition: width 0.5s ease;
+        }
+        
+        .status-message {
+            font-size: 0.9rem;
+            color: #9393bb;
+            margin-top: 15px;
+        }
+        
+        .controls {
+            background: rgba(30, 30, 46, 0.95);
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 15px;
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            z-index: 50;
+            box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+            transform: translateY(0);
+            transition: transform 0.4s ease;
+        }
+        
+        .toggle-controls {
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 40px;
+            background: #4361ee;
+            border: none;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: 500;
+        }
+        
+        .model-selector {
+            display: flex;
+            overflow-x: auto;
+            gap: 12px;
+            margin-bottom: 15px;
+            padding: 5px;
+        }
+        
+        .model-btn {
+            background: rgba(67, 97, 238, 0.2);
+            border-radius: 10px;
+            padding: 10px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-width: 80px;
+            flex-shrink: 0;
+            border: 1px solid rgba(100, 100, 150, 0.3);
+        }
+        
+        .model-btn img {
+            width: 40px;
+            height: 40px;
+            object-fit: contain;
+            margin-bottom: 8px;
+        }
+        
+        .model-name {
+            font-size: 0.8rem;
+            text-align: center;
+            color: #e0e0ff;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .action-btn {
+            background: linear-gradient(90deg, #4361ee, #3a55d0);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 14px 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        
+        .action-btn.primary {
+            background: linear-gradient(90deg, #4361ee, #3ab7d7);
+            box-shadow: 0 5px 20px rgba(67, 97, 238, 0.4);
+        }
+        
+        @media (max-width: 768px) {
+            .loading-title {
+                font-size: 1.5rem;
+            }
+            
+            .loading-text {
+                font-size: 1rem;
+            }
+            
+            .spinner {
+                width: 50px;
+                height: 50px;
+            }
+            
+            .action-btn {
+                padding: 12px 8px;
+                font-size: 0.9rem;
+            }
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>BabylonJS AR眼镜试戴</h1>
+    </header>
+    
+    <canvas id="renderCanvas"></canvas>
+    
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h2 class="loading-title">正在初始化AR系统</h2>
+            <p class="loading-text">请稍候，我们正在加载所需资源并准备3D环境...</p>
+            
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="status-message" id="statusMessage">检查WebGL支持...</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <div class="model-selector">
+            <div class="model-btn">
+                <img src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 30'%3E%3Crect width='60' height='30' fill='%234361ee'/%3E%3Ctext x='30' y='20' font-size='12' text-anchor='middle' fill='white'%3E经典款%3C/text%3E%3C/svg%3E" alt="经典款">
+                <span class="model-name">经典款</span>
+            </div>
+            <div class="model-btn">
+                <img src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 30'%3E%3Crect width='60' height='30' fill='%234361ee'/%3E%3Ctext x='30' y='20' font-size='12' text-anchor='middle' fill='white'%3E时尚款%3C/text%3E%3C/svg%3E" alt="时尚款">
+                <span class="model-name">时尚款</span>
+            </div>
+            <div class="model-btn">
+                <img src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 30'%3E%3Crect width='60' height='30' fill='%234361ee'/%3E%3Ctext x='30' y='20' font-size='12' text-anchor='middle' fill='white'%3E运动款%3C/text%3E%3C/svg%3E" alt="运动款">
+                <span class="model-name">运动款</span>
+            </div>
+        </div>
+        
+        <div class="action-buttons">
+            <button id="arButton" class="action-btn primary">进入AR模式</button>
+            <button id="modelButton" class="action-btn">导入模型</button>
+        </div>
+        
+        <button class="toggle-controls">收起控制面板</button>
+    </div>
+    
+    <input type="file" id="fileInput" accept=".glb" style="display:none;">
+    
+    <!-- 使用CDN链接确保Babylon.js正确加载 -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    
+    <script>
+        // 显示加载进度
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const progressFill = document.getElementById('progressFill');
+        const statusMessage = document.getElementById('statusMessage');
+        
+        function updateProgress(percent, message) {
+            progressFill.style.width = `${percent}%`;
+            statusMessage.textContent = message;
+            
+            // 如果加载完成，淡出加载界面
+            if (percent >= 100) {
+                setTimeout(() => {
+                    loadingOverlay.style.opacity = '0';
+                    setTimeout(() => {
+                        loadingOverlay.style.display = 'none';
+                    }, 500);
+                }, 800);
+            }
+        }
+        
+        // 初始化场景
+        function initializeScene() {
+            try {
+                updateProgress(20, "正在创建3D引擎...");
+                
+                const canvas = document.getElementById("renderCanvas");
+                if (!canvas) {
+                    throw new Error("无法找到渲染画布");
+                }
+                
+                // 创建Babylon引擎
+                const engine = new BABYLON.Engine(canvas, true);
+                
+                // 引擎错误处理
+                engine.onError = (error) => {
+                    console.error("引擎错误:", error);
+                    updateProgress(0, "引擎初始化失败: " + error.message);
+                };
+                
+                updateProgress(30, "正在创建场景...");
+                
+                // 创建场景
+                const scene = new BABYLON.Scene(engine);
+                
+                // 添加相机
+                const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 3, 1.5, BABYLON.Vector3.Zero(), scene);
+                camera.attachControl(canvas, true);
+                
+                // 添加光源
+                new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0, 1, 0), scene);
+                new BABYLON.DirectionalLight("light2", new BABYLON.Vector3(0.5, -1, 0.5), scene);
+                
+                updateProgress(50, "正在加载眼镜模型...");
+                
+                // 创建一个简易的眼镜模型作为示例
+                createSampleGlasses(scene);
+                
+                // 窗口大小变化
+                window.addEventListener("resize", () => {
+                    engine.resize();
+                });
+                
+                // 渲染循环
+                engine.runRenderLoop(() => {
+                    scene.render();
+                });
+                
+                updateProgress(100, "加载完成，准备体验！");
+                
+                // 设置控制面板切换
+                setupControlToggles();
+                
+                return true;
+            } catch (error) {
+                // 显示错误消息
+                showError("场景初始化失败: " + error.message);
+                return false;
+            }
+        }
+        
+        // 创建简易眼镜模型作为示例
+        function createSampleGlasses(scene) {
+            try {
+                // 镜框
+                const frame = BABYLON.MeshBuilder.CreateTorus("frame", {
+                    diameter: 0.8,
+                    thickness: 0.05,
+                    tessellation: 32
+                }, scene);
+                frame.position.y = 0.1;
+                
+                // 镜片
+                const lensLeft = BABYLON.MeshBuilder.CreateBox("lensLeft", {
+                    width: 0.25,
+                    height: 0.5,
+                    depth: 0.01
+                }, scene);
+                lensLeft.position.x = -0.2;
+                lensLeft.position.y = 0.15;
+                
+                const lensRight = BABYLON.MeshBuilder.CreateBox("lensRight", {
+                    width: 0.25,
+                    height: 0.5,
+                    depth: 0.01
+                }, scene);
+                lensRight.position.x = 0.2;
+                lensRight.position.y = 0.15;
+                
+                // 镜腿
+                const armLeft = BABYLON.MeshBuilder.CreateCylinder("armLeft", {
+                    height: 0.8,
+                    diameter: 0.03
+                }, scene);
+                armLeft.rotation.z = -Math.PI / 4;
+                armLeft.position.x = -0.35;
+                armLeft.position.y = 0.1;
+                
+                const armRight = BABYLON.MeshBuilder.CreateCylinder("armRight", {
+                    height: 0.8,
+                    diameter: 0.03
+                }, scene);
+                armRight.rotation.z = Math.PI / 4;
+                armRight.position.x = 0.35;
+                armRight.position.y = 0.1;
+                
+                // 材质
+                const frameMaterial = new BABYLON.StandardMaterial("frameMaterial", scene);
+                frameMaterial.diffuseColor = BABYLON.Color3.FromHexString("#D4AF37"); // 金色
+                frame.material = frameMaterial;
+                
+                const armMaterial = new BABYLON.StandardMaterial("armMaterial", scene);
+                armMaterial.diffuseColor = BABYLON.Color3.FromHexString("#D4AF37");
+                armLeft.material = armMaterial;
+                armRight.material = armMaterial;
+                
+                const lensMaterial = new BABYLON.StandardMaterial("lensMaterial", scene);
+                lensMaterial.diffuseColor = BABYLON.Color3.FromHexString("#0074D9"); // 蓝色
+                lensMaterial.alpha = 0.7;
+                lensLeft.material = lensMaterial;
+                lensRight.material = lensMaterial;
+                
+                return true;
+            } catch (error) {
+                console.error("创建示例模型失败:", error);
+                return false;
+            }
+        }
+        
+        // 设置控制面板切换
+        function setupControlToggles() {
+            const controls = document.querySelector('.controls');
+            const toggleBtn = document.querySelector('.toggle-controls');
+            
+            // 初始状态
+            setTimeout(() => {
+                controls.classList.remove('hidden');
+            }, 500);
+            
+            toggleBtn.addEventListener('click', () => {
+                if (toggleBtn.textContent === "收起控制面板") {
+                    controls.style.transform = "translateY(calc(100% - 50px))";
+                    toggleBtn.textContent = "展开控制面板";
+                } else {
+                    controls.style.transform = "translateY(0)";
+                    toggleBtn.textContent = "收起控制面板";
+                }
+            });
+        }
+        
+        // 显示错误
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.style.position = 'absolute';
+            errorDiv.style.top = '100px';
+            errorDiv.style.left = '0';
+            errorDiv.style.right = '0';
+            errorDiv.style.textAlign = 'center';
+            errorDiv.style.padding = '15px';
+            errorDiv.style.background = 'rgba(200, 0, 0, 0.7)';
+            errorDiv.style.color = 'white';
+            errorDiv.style.zIndex = '300';
+            errorDiv.textContent = "错误: " + message;
+            
+            document.body.appendChild(errorDiv);
+            
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // 主要初始化流程
+        function main() {
+            updateProgress(10, "检查浏览器支持...");
+            
+            // 检查WebGL支持
+            if (!BABYLON.Engine.isSupported()) {
+                updateProgress(0, "您的设备或浏览器不支持WebGL");
+                showError("您的设备或浏览器不支持WebGL，请尝试使用Chrome、Firefox或Edge等现代浏览器");
+                return;
+            }
+            
+            // 创建场景
+            if (!initializeScene()) {
+                showError("创建3D场景失败，请重试");
+                return;
+            }
+            
+            // 设置AR按钮
+            document.getElementById("arButton").addEventListener("click", () => {
+                alert("AR功能需要连接互联网获取资源，点击导入模型按钮可以添加您自己的眼镜模型");
+            });
+            
+            // 设置导入模型按钮
+            document.getElementById("modelButton").addEventListener("click", () => {
+                document.getElementById("fileInput").click();
+            });
+            
+            // 文件选择处理
+            document.getElementById("fileInput").addEventListener("change", (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    alert("您选择了: " + file.name + "\n\n由于在线资源问题，建议尝试本地WebXR模拟器");
+                }
+            });
+        }
+        
+        // 启动初始化过程
+        window.addEventListener('DOMContentLoaded', main);
+    </script>
+</body>
+</html>
